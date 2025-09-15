@@ -6,5 +6,7 @@ services:
     buildCommand: |
       bun install
       bunx puppeteer browsers install chrome
+      export PUPPETEER_EXECUTABLE_PATH=$(find /opt/render/.cache/puppeteer -name chrome -type f | head -1)
+      echo "Chrome path: $PUPPETEER_EXECUTABLE_PATH"
     startCommand: bun start
     autoDeploy: true
