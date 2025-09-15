@@ -3,6 +3,8 @@ services:
     name: screenshot-api
     env: node
     plan: free
-    buildCommand: bun install
+    buildCommand: |
+      bun install
+      bunx puppeteer browsers install chrome
     startCommand: bun start
     autoDeploy: true
