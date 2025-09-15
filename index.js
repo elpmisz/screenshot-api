@@ -49,23 +49,58 @@ async function initBrowser() {
     try {
       // Try to find Chrome executable path
       let executablePath = null;
-      
+
       // For Render deployment
       if (process.env.RENDER) {
         // Try to find installed Chrome
-        const fs = require('fs');
-        const possiblePaths = [
-          '/opt/render/.cache/puppeteer/chrome/linux-140.0.7339.82/chrome-linux64/chrome',
-          '/usr/bin/chromium-browser',
-          '/usr/bin/google-chrome-stable',
-          '/usr/bin/google-chrome'
-        ];
-        
-        for (const path of possiblePaths) {
-          if (fs.existsSync && fs.existsSync(path)) {
-            executablePath = path;
-            console.log(`Found Chrome at: ${path}`);
-            break;
+        const fs = require("fs");
+        const path = require("path");
+
+        console.log("Searching for Chrome executable...");
+
+        // First, try to use puppeteer's built-in Chrome finder
+        try {
+          executablePath = puppeteer.executablePath();
+          console.log(`Puppeteer found Chrome at: ${executablePath}`);
+        } catch (err) {
+          console.log(
+            "Puppeteer could not find Chrome, trying manual search..."
+          );
+
+          const possiblePaths = [
+            "/opt/render/.cache/puppeteer/chrome/linux-140.0.7339.82/chrome-linux64/chrome",
+            "/usr/bin/chromium-browser",
+            "/usr/bin/google-chrome-stable",
+            "/usr/bin/google-chrome",
+            "/snap/bin/chromium",
+          ];
+
+          for (const chromePath of possiblePaths) {
+            console.log(`Checking: ${chromePath}`);
+            if (fs.existsSync && fs.existsSync(chromePath)) {
+              executablePath = chromePath;
+              console.log(`Found Chrome at: ${chromePath}`);
+              break;
+            }
+          }
+
+          // If still not found, try to find any chrome executable
+          if (!executablePath) {
+            try {
+              const { execSync } = require("child_process");
+              const result = execSync(
+                'which google-chrome || which chromium-browser || which chromium || find /opt -name "chrome" -type f 2>/dev/null | head -1',
+                { encoding: "utf8" }
+              );
+              if (result.trim()) {
+                executablePath = result.trim();
+                console.log(
+                  `Found Chrome via system search: ${executablePath}`
+                );
+              }
+            } catch (searchErr) {
+              console.log("System search failed:", searchErr.message);
+            }
           }
         }
       }
@@ -80,14 +115,20 @@ async function initBrowser() {
           "--disable-web-security",
           "--disable-features=VizDisplayCompositor",
           "--single-process",
-          "--no-zygote"
+          "--no-zygote",
         ],
       };
 
       if (executablePath) {
         launchOptions.executablePath = executablePath;
+        console.log(`Using Chrome executable: ${executablePath}`);
+      } else {
+        console.log(
+          "No Chrome executable found, letting Puppeteer try default..."
+        );
       }
 
+      console.log("Launch options:", JSON.stringify(launchOptions, null, 2));
       browser = await puppeteer.launch(launchOptions);
       console.log("Browser launched successfully with memory optimizations");
 
@@ -195,11 +236,9 @@ app.get("/screenshot", async (req, res) => {
       err.message.includes("Target closed") ||
       err.message.includes("Protocol error")
     ) {
-      res
-        .status(503)
-        .json({
-          error: "Browser service temporarily unavailable, please retry",
-        });
+      res.status(503).json({
+        error: "Browser service temporarily unavailable, please retry",
+      });
     } else {
       console.error("Full error details:", {
         message: err.message,
