@@ -1,9 +1,18 @@
 {
   "name": "screenshot-api",
   "version": "1.0.0",
+  "description": "High-performance screenshot API with auto-sleep optimization",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "node index.js",
+    "health": "curl http://localhost:3000/health"
+  },
+  "keywords": ["screenshot", "puppeteer", "api", "web-scraping"],
+  "author": "Your Name",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "express": "^5.1.0",

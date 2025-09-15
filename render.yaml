@@ -3,11 +3,14 @@ services:
     name: screenshot-api
     env: node
     plan: free
-    buildCommand: |
-      bun install
-      bunx puppeteer browsers install chrome
-      CHROME_PATH=$(find /opt/render/.cache/puppeteer -name chrome -type f | head -1)
-      echo "Chrome path: $CHROME_PATH"
-      echo "PUPPETEER_EXECUTABLE_PATH=$CHROME_PATH" >> $ENV_FILE
-    startCommand: bun start
+    buildCommand: npm install && npx puppeteer browsers install chrome
+    startCommand: npm start
+    envVars:
+      - key: PUPPETEER_CACHE_DIR
+        value: /opt/render/.cache/puppeteer
+      - key: IDLE_TIMEOUT
+        value: 180000
+      - key: NODE_ENV
+        value: production
+    healthCheckPath: /health
     autoDeploy: true
