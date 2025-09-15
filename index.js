@@ -189,15 +189,26 @@ app.get("/screenshot", async (req, res) => {
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
 
     // Wait a bit for dynamic content
-    await page.waitForTimeout(1000);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    const buffer = await page.screenshot({
+    const screenshotType = req.query.type || "png";
+    const screenshotOptions = {
       fullPage: req.query.fullPage !== "false",
-      type: "png",
-      quality: 90,
-    });
+      type: screenshotType,
+    };
 
-    res.set("Content-Type", "image/png");
+    // Only add quality for JPEG
+    if (screenshotType === "jpeg" || screenshotType === "jpg") {
+      screenshotOptions.quality = parseInt(req.query.quality) || 90;
+    }
+
+    const buffer = await page.screenshot(screenshotOptions);
+
+    const contentType =
+      screenshotType === "jpeg" || screenshotType === "jpg"
+        ? "image/jpeg"
+        : "image/png";
+    res.set("Content-Type", contentType);
     res.set("Cache-Control", "public, max-age=3600"); // Cache for 1 hour
     res.send(buffer);
 

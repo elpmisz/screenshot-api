@@ -5,11 +5,14 @@ services:
     plan: free
     buildCommand: |
       npm install
-      npm install puppeteer
       npx puppeteer browsers install chrome
       echo "=== Chrome Installation Check ==="
-      ls -la /opt/render/.cache/puppeteer/chrome/ 2>/dev/null || echo "Chrome cache not found"
-      find /opt/render/.cache -name "chrome" -type f 2>/dev/null | head -5
+      find /opt/render/.cache -name "chrome" -type f 2>/dev/null
+      ls -la /opt/render/.cache/puppeteer/ 2>/dev/null
+      echo "=== Available Chrome executables ==="
+      find /opt/render/.cache/puppeteer -name "chrome" -executable -type f 2>/dev/null
+      echo "=== Chrome permissions ==="
+      find /opt/render/.cache/puppeteer -name "chrome" -type f -exec ls -la {} \; 2>/dev/null
       echo "=== End Check ==="
     startCommand: npm start
     envVars:
@@ -17,15 +20,11 @@ services:
         value: /opt/render/.cache/puppeteer
       - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
         value: false
-      - key: PUPPETEER_EXECUTABLE_PATH
-        value: /opt/render/.cache/puppeteer/chrome/linux-*/chrome-linux64/chrome
       - key: IDLE_TIMEOUT
         value: 180000
       - key: NODE_ENV
         value: production
       - key: RENDER
         value: true
-      - key: DISPLAY
-        value: :99
     healthCheckPath: /health
     autoDeploy: true
