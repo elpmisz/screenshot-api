@@ -4,26 +4,30 @@ const crypto = require("crypto");
 
 const app = express();
 
-// Configuration
+// Configuration with environment variable support
 const CONFIG = {
   IDLE_TIMEOUT: process.env.IDLE_TIMEOUT
     ? parseInt(process.env.IDLE_TIMEOUT)
     : 5 * 60 * 1000, // 5 minutes
   BROWSER_POOL_SIZE: process.env.BROWSER_POOL_SIZE
     ? parseInt(process.env.BROWSER_POOL_SIZE)
-    : 3,
+    : process.env.RENDER
+    ? 1
+    : 3, // Smaller pool for Render
   MAX_CONCURRENT_REQUESTS: process.env.MAX_CONCURRENT_REQUESTS
     ? parseInt(process.env.MAX_CONCURRENT_REQUESTS)
-    : 5,
+    : process.env.RENDER
+    ? 2
+    : 5, // Fewer concurrent requests for Render
   PAGE_LOAD_TIMEOUT: process.env.PAGE_LOAD_TIMEOUT
     ? parseInt(process.env.PAGE_LOAD_TIMEOUT)
-    : 60000, // Increased from 30 to 60 seconds
+    : 60000, // 60 seconds
   CONTENT_STABILITY_TIMEOUT: process.env.CONTENT_STABILITY_TIMEOUT
     ? parseInt(process.env.CONTENT_STABILITY_TIMEOUT)
-    : 10000, // 10 seconds for content stability check
+    : 15000, // 15 seconds for content stability check
   CRITICAL_CONTENT_TIMEOUT: process.env.CRITICAL_CONTENT_TIMEOUT
     ? parseInt(process.env.CRITICAL_CONTENT_TIMEOUT)
-    : 15000, // 15 seconds for critical content wait
+    : 20000, // 20 seconds for critical content wait
   CACHE_TTL: process.env.CACHE_TTL
     ? parseInt(process.env.CACHE_TTL)
     : 10 * 60 * 1000, // 10 minutes
@@ -100,66 +104,108 @@ class BrowserPool {
       ],
       ignoreDefaultArgs: ["--enable-automation"],
       ignoreHTTPSErrors: true,
-      timeout: 30000,
+      timeout: process.env.RENDER ? 120000 : 60000, // 2 minutes for Render, 1 minute for others
     };
 
-    // Browser executable detection (same as original)
+    // Browser executable detection with improved Render support
     let executablePath = null;
     const fs = require("fs");
     const path = require("path");
 
     // For Windows - try Microsoft Edge first, then Chrome
-    const edgePaths = [
-      "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-      "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-    ];
+    if (process.platform === "win32") {
+      const edgePaths = [
+        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+        "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+      ];
 
-    for (const edgePath of edgePaths) {
-      if (fs.existsSync(edgePath)) {
-        executablePath = edgePath;
-        break;
-      }
-    }
-
-    if (!executablePath) {
-      const chromePaths = [
-        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-        "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-        process.env.PUPPETEER_EXECUTABLE_PATH,
-      ].filter(Boolean);
-
-      for (const chromePath of chromePaths) {
-        if (fs.existsSync(chromePath)) {
-          executablePath = chromePath;
+      for (const edgePath of edgePaths) {
+        if (fs.existsSync(edgePath)) {
+          executablePath = edgePath;
+          console.log(`Found Edge browser at: ${executablePath}`);
           break;
         }
       }
-    }
 
-    // For Render deployment
-    if (process.env.RENDER && !executablePath) {
-      executablePath =
-        process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium-browser";
+      if (!executablePath) {
+        const chromePaths = [
+          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+          "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+          process.env.PUPPETEER_EXECUTABLE_PATH,
+        ].filter(Boolean);
 
-      if (!fs.existsSync(executablePath)) {
-        const alternatives = [
-          "/usr/bin/chromium-browser",
-          "/usr/bin/google-chrome-stable",
-          "/usr/bin/google-chrome",
-          "/usr/bin/chromium",
-        ];
-
-        for (const alt of alternatives) {
-          if (fs.existsSync(alt)) {
-            executablePath = alt;
+        for (const chromePath of chromePaths) {
+          if (fs.existsSync(chromePath)) {
+            executablePath = chromePath;
+            console.log(`Found Chrome browser at: ${executablePath}`);
             break;
           }
         }
       }
     }
 
+    // For Render deployment and other Linux environments
+    if (
+      !executablePath &&
+      (process.env.RENDER || process.platform === "linux")
+    ) {
+      console.log("Detecting browser for Linux/Render environment...");
+
+      // Check environment variable first
+      if (
+        process.env.PUPPETEER_EXECUTABLE_PATH &&
+        fs.existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)
+      ) {
+        executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+        console.log(`Using PUPPETEER_EXECUTABLE_PATH: ${executablePath}`);
+      } else {
+        // Common Chromium paths on Linux/Render
+        const chromiumPaths = [
+          "/usr/bin/chromium-browser",
+          "/usr/bin/chromium",
+          "/usr/bin/google-chrome-stable",
+          "/usr/bin/google-chrome",
+          "/usr/lib/bin/chromium-browser",
+          "/usr/lib/bin/chromium",
+          "/opt/google/chrome/chrome",
+          "/opt/chromium/chromium",
+          "/snap/bin/chromium",
+          "/snap/bin/chromium-browser",
+        ];
+
+        for (const chromiumPath of chromiumPaths) {
+          if (fs.existsSync(chromiumPath)) {
+            executablePath = chromiumPath;
+            console.log(`Found Chromium at: ${executablePath}`);
+            break;
+          }
+        }
+      }
+
+      // If no system browser found, try to use Puppeteer's bundled Chromium
+      if (!executablePath) {
+        try {
+          console.log(
+            "No system browser found, attempting to use Puppeteer's bundled Chromium..."
+          );
+          // Puppeteer will automatically download and use bundled Chromium if no executablePath is set
+          console.log("Will use Puppeteer's bundled Chromium as fallback");
+        } catch (error) {
+          console.error(
+            "Failed to setup Puppeteer bundled Chromium:",
+            error.message
+          );
+        }
+      }
+    }
+
     if (executablePath) {
       launchOptions.executablePath = executablePath;
+      console.log(`Using browser executable: ${executablePath}`);
+    } else {
+      console.log(
+        "No specific browser executable found, using Puppeteer's default (bundled Chromium)"
+      );
     }
 
     const browser = await puppeteer.launch(launchOptions);
@@ -173,49 +219,97 @@ class BrowserPool {
     return browser;
   }
 
-  async acquireBrowser() {
+  async acquireBrowser(retryCount = 0) {
     if (this.isShuttingDown) {
       throw new Error("Browser pool is shutting down");
     }
 
-    // Return available browser immediately
-    if (this.availableBrowsers.length > 0) {
-      const browser = this.availableBrowsers.pop();
-      if (this.isBrowserHealthy(browser)) {
-        return browser;
-      } else {
-        // Browser is unhealthy, remove it and try again
-        this.removeBrowser(browser);
-        return this.acquireBrowser();
-      }
-    }
+    const maxRetries = 2;
 
-    // If no browsers available and pool not full, create new one
-    if (this.browsers.length < this.poolSize) {
-      try {
-        const browser = await this.createBrowser();
-        this.browsers.push(browser);
-        return browser;
-      } catch (error) {
-        console.error("Failed to create new browser:", error.message);
-      }
-    }
-
-    // Wait for available browser with timeout
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        const index = this.waitingQueue.indexOf(resolve);
-        if (index > -1) {
-          this.waitingQueue.splice(index, 1);
+    try {
+      // Return available browser immediately
+      if (this.availableBrowsers.length > 0) {
+        const browser = this.availableBrowsers.pop();
+        if (this.isBrowserHealthy(browser)) {
+          console.log("Acquired healthy browser from pool");
+          return browser;
+        } else {
+          // Browser is unhealthy, remove it and try again
+          console.log("Removing unhealthy browser from pool");
+          this.removeBrowser(browser);
+          return this.acquireBrowser(retryCount);
         }
-        reject(new Error("Browser acquisition timeout"));
-      }, 30000);
+      }
 
-      this.waitingQueue.push((browser) => {
-        clearTimeout(timeout);
-        resolve(browser);
+      // If no browsers available and pool not full, create new one
+      if (this.browsers.length < this.poolSize) {
+        try {
+          console.log(
+            `Creating new browser (${this.browsers.length + 1}/${
+              this.poolSize
+            })`
+          );
+          const browser = await this.createBrowser();
+          this.browsers.push(browser);
+          console.log("Browser created and added to pool successfully");
+          return browser;
+        } catch (error) {
+          console.error(
+            `Failed to create new browser (attempt ${retryCount + 1}):`,
+            error.message
+          );
+
+          if (retryCount < maxRetries) {
+            console.log(`Retrying browser creation in 3 seconds...`);
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+            return this.acquireBrowser(retryCount + 1);
+          } else {
+            console.error(
+              `Failed to create browser after ${maxRetries + 1} attempts`
+            );
+            throw new Error(
+              `Browser creation failed after ${maxRetries + 1} attempts: ${
+                error.message
+              }`
+            );
+          }
+        }
+      }
+
+      // Wait for available browser with increased timeout
+      console.log("No available browsers, waiting in queue...");
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          const index = this.waitingQueue.indexOf(resolve);
+          if (index > -1) {
+            this.waitingQueue.splice(index, 1);
+          }
+          console.error("Browser acquisition timeout after 60 seconds");
+          reject(
+            new Error(
+              "Browser acquisition timeout - no browser available within 60 seconds"
+            )
+          );
+        }, 60000); // Increased from 30 to 60 seconds
+
+        this.waitingQueue.push((browser) => {
+          clearTimeout(timeout);
+          console.log("Browser acquired from queue");
+          resolve(browser);
+        });
       });
-    });
+    } catch (error) {
+      if (retryCount < maxRetries && !error.message.includes("shutting down")) {
+        console.log(
+          `Retrying browser acquisition in 2 seconds... (${retryCount + 1}/${
+            maxRetries + 1
+          })`
+        );
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        return this.acquireBrowser(retryCount + 1);
+      }
+      throw error;
+    }
   }
 
   releaseBrowser(browser) {
