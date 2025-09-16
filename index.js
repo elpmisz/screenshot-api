@@ -657,7 +657,16 @@ class BrowserPool {
 
     try {
       if (browser && browser.isConnected()) {
-        browser.close();
+        // Close browser with timeout to prevent hanging
+        const closePromise = browser.close();
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Browser close timeout")), 5000)
+        );
+
+        Promise.race([closePromise, timeoutPromise]).catch((error) => {
+          console.log("Browser close warning:", error.message);
+          // Don't throw - we want to continue cleanup
+        });
       }
     } catch (error) {
       console.error("Error closing browser:", error.message);
@@ -674,12 +683,25 @@ class BrowserPool {
     });
     this.waitingQueue = [];
 
-    // Close all browsers
-    const closePromises = this.browsers.map((browser) => {
+    // Close all browsers with better error handling
+    const closePromises = this.browsers.map(async (browser) => {
       try {
-        return browser.close();
+        if (browser && browser.isConnected()) {
+          // Close browser with timeout to prevent hanging
+          const closePromise = browser.close();
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Browser close timeout")), 10000)
+          );
+
+          await Promise.race([closePromise, timeoutPromise]).catch((error) => {
+            console.log(
+              "Browser close warning during shutdown:",
+              error.message
+            );
+          });
+        }
       } catch (error) {
-        return Promise.resolve(); // Ignore errors during shutdown
+        console.log("Browser close error during shutdown:", error.message);
       }
     });
 
@@ -1504,6 +1526,20 @@ process.on("uncaughtException", (error) => {
 
 process.on("unhandledRejection", (reason, promise) => {
   console.error("Unhandled rejection at:", promise, "reason:", reason);
+
+  // Don't shutdown for common Puppeteer cleanup errors
+  if (
+    reason &&
+    reason.code === "EBUSY" &&
+    reason.message &&
+    reason.message.includes("lockfile")
+  ) {
+    console.log(
+      "Ignoring EBUSY lockfile error - this is normal during browser cleanup"
+    );
+    return;
+  }
+
   gracefulShutdown("unhandledRejection");
 });
 
