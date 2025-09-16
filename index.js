@@ -262,9 +262,62 @@ class BrowserPool {
               }
             }
           }
-        }
 
-        // If no system browser found, try to use Puppeteer's bundled Chromium
+          // Last resort: Search entire filesystem for any chromium-like browser
+          if (!executablePath) {
+            console.log(
+              "Searching entire filesystem for any chromium-like browser..."
+            );
+            try {
+              const find = require("child_process").execSync;
+              // Search for common browser names
+              const browserNames = [
+                "chromium",
+                "chromium-browser",
+                "google-chrome",
+                "google-chrome-stable",
+                "chrome",
+              ];
+              for (const browserName of browserNames) {
+                try {
+                  const result = find(
+                    `find /usr /opt /snap /app -name "${browserName}" -type f -executable 2>/dev/null | head -1`,
+                    { encoding: "utf8" }
+                  );
+                  if (result.trim()) {
+                    executablePath = result.trim();
+                    console.log(
+                      `Found browser via filesystem search: ${executablePath}`
+                    );
+                    break;
+                  }
+                } catch (e) {
+                  // Continue to next browser name
+                }
+              }
+
+              // If still not found, try a broader search
+              if (!executablePath) {
+                try {
+                  const result = require("child_process").execSync(
+                    `find /usr /opt /snap /app -name "*chrom*" -type f -executable 2>/dev/null | head -1`,
+                    { encoding: "utf8" }
+                  );
+                  if (result.trim()) {
+                    executablePath = result.trim();
+                    console.log(
+                      `Found chromium-like binary via broad search: ${executablePath}`
+                    );
+                  }
+                } catch (e) {
+                  console.log("Broad chromium search also failed");
+                }
+              }
+            } catch (error) {
+              console.log("Filesystem search failed:", error.message);
+            }
+          }
+        }
         if (!executablePath) {
           try {
             console.log(

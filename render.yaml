@@ -12,63 +12,115 @@ services:
       echo "=== Installing Dependencies ==="
       npm install
 
-      echo "=== Installing System Chromium (Multiple Methods) ==="
-      # Method 1: Try chromium-browser
-      echo "Trying chromium-browser..."
-      apt-get update && apt-get install -y chromium-browser || echo "chromium-browser not available"
+      echo "=== Aggressive Chromium Installation ==="
+      # Update package lists
+      apt-get update --fix-missing || echo "apt-get update failed"
 
-      # Method 2: Try chromium
-      echo "Trying chromium..."
-      apt-get install -y chromium || echo "chromium not available"
+      # Install basic dependencies first
+      apt-get install -y wget gnupg2 software-properties-common || echo "Basic dependencies failed"
 
-      # Method 3: Try google-chrome-stable
-      echo "Trying google-chrome-stable..."
-      wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - && \
-      echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list && \
-      apt-get update && apt-get install -y google-chrome-stable || echo "google-chrome-stable not available"
+      # Method 1: Try to install chromium directly
+      echo "Method 1: Installing chromium..."
+      apt-get install -y chromium || echo "chromium installation failed"
 
-      echo "=== Installing Puppeteer Chromium (Multiple Attempts) ==="
-      # Try multiple times with different approaches
-      echo "Attempt 1: Standard Puppeteer installation"
-      PUPPETEER_CACHE_DIR=/opt/render/.cache/puppeteer npx puppeteer browsers install chrome || echo "Standard installation failed"
+      # Method 2: Try chromium-browser
+      echo "Method 2: Installing chromium-browser..."
+      apt-get install -y chromium-browser || echo "chromium-browser installation failed"
 
-      echo "Attempt 2: Force download with specific version"
-      PUPPETEER_CACHE_DIR=/opt/render/.cache/puppeteer npx puppeteer browsers install chrome@latest || echo "Latest version installation failed"
+      # Method 3: Try google-chrome-stable with proper setup
+      echo "Method 3: Installing google-chrome-stable..."
+      wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - 2>/dev/null || echo "Google key failed"
+      echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list 2>/dev/null || echo "Google repo failed"
+      apt-get update 2>/dev/null || echo "Google repo update failed"
+      apt-get install -y google-chrome-stable || echo "google-chrome-stable installation failed"
 
-      echo "Attempt 3: Install with skip download flag reset"
+      # Method 4: Try alternative chromium packages
+      echo "Method 4: Installing alternative chromium packages..."
+      apt-get install -y chromium-chromedriver || echo "chromium-chromedriver failed"
+      apt-get install -y chromium-l10n || echo "chromium-l10n failed"
+
+      echo "=== Force Puppeteer Browser Installation ==="
+      # Set environment variables
+      export PUPPETEER_CACHE_DIR=/opt/render/.cache/puppeteer
       export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
-      PUPPETEER_CACHE_DIR=/opt/render/.cache/puppeteer PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false npx puppeteer browsers install chrome || echo "Skip download reset failed"
 
-      echo "=== Verifying Installation ==="
-      echo "Checking cache directory structure..."
-      ls -la /opt/render/.cache/puppeteer/ 2>/dev/null || echo "Cache directory not found"
-      ls -la /opt/render/.cache/puppeteer/chrome/ 2>/dev/null || echo "Chrome directory not found"
+      # Clean any existing cache
+      rm -rf /opt/render/.cache/puppeteer/chrome 2>/dev/null || echo "Cache cleanup failed"
 
-      echo "Finding all Chrome binaries..."
-      find /opt/render/.cache/puppeteer/ -name "chrome" -type f 2>/dev/null || echo "No Chrome binaries found in cache"
+      # Attempt 1: Install with explicit cache directory
+      echo "Attempt 1: Puppeteer install with explicit cache"
+      PUPPETEER_CACHE_DIR=/opt/render/.cache/puppeteer npx puppeteer browsers install chrome --platform linux --arch x64 || echo "Attempt 1 failed"
 
-      echo "Checking system browsers..."
-      which chromium-browser 2>/dev/null && echo "Found chromium-browser" || echo "chromium-browser not found"
-      which chromium 2>/dev/null && echo "Found chromium" || echo "chromium not found"
-      which google-chrome-stable 2>/dev/null && echo "Found google-chrome-stable" || echo "google-chrome-stable not found"
-      which google-chrome 2>/dev/null && echo "Found google-chrome" || echo "google-chrome not found"
+      # Attempt 2: Install latest version
+      echo "Attempt 2: Install latest Chrome version"
+      PUPPETEER_CACHE_DIR=/opt/render/.cache/puppeteer npx puppeteer browsers install chrome@latest || echo "Attempt 2 failed"
 
-      echo "=== Creating Symlinks for Compatibility ==="
-      # Create symlinks to ensure compatibility
-      if [ -f "/usr/bin/chromium-browser" ]; then
-        ln -sf /usr/bin/chromium-browser /usr/bin/chromium 2>/dev/null || echo "Symlink creation failed"
+      # Attempt 3: Install specific working version
+      echo "Attempt 3: Install Chrome 131 (known working version)"
+      PUPPETEER_CACHE_DIR=/opt/render/.cache/puppeteer npx puppeteer browsers install chrome@131.0.6778.85 || echo "Attempt 3 failed"
+
+      # Attempt 4: Manual download as last resort
+      echo "Attempt 4: Manual Chrome download"
+      if [ ! -f "/opt/render/.cache/puppeteer/chrome/linux-131.0.6778.85/chrome-linux64/chrome" ]; then
+        mkdir -p /opt/render/.cache/puppeteer/chrome/linux-131.0.6778.85/chrome-linux64
+        cd /opt/render/.cache/puppeteer/chrome/linux-131.0.6778.85/chrome-linux64
+        wget -q https://storage.googleapis.com/chromium-browser-snapshots/Linux_x64/1316778/chrome-linux.zip 2>/dev/null || echo "Manual download failed"
+        if [ -f "chrome-linux.zip" ]; then
+          unzip -q chrome-linux.zip 2>/dev/null || echo "Unzip failed"
+          chmod +x chrome 2>/dev/null || echo "chmod failed"
+          echo "Manual Chrome installation completed"
+        fi
       fi
 
-      if [ -f "/usr/bin/google-chrome-stable" ]; then
-        ln -sf /usr/bin/google-chrome-stable /usr/bin/google-chrome 2>/dev/null || echo "Symlink creation failed"
+      echo "=== Comprehensive Verification ==="
+      echo "Checking all possible browser locations..."
+
+      # Check system browsers
+      echo "System browsers:"
+      which chromium-browser 2>/dev/null && echo "✓ chromium-browser found: $(which chromium-browser)" || echo "✗ chromium-browser not found"
+      which chromium 2>/dev/null && echo "✓ chromium found: $(which chromium)" || echo "✗ chromium not found"
+      which google-chrome-stable 2>/dev/null && echo "✓ google-chrome-stable found: $(which google-chrome-stable)" || echo "✗ google-chrome-stable not found"
+      which google-chrome 2>/dev/null && echo "✓ google-chrome found: $(which google-chrome)" || echo "✗ google-chrome not found"
+
+      # Check puppeteer cache
+      echo "Puppeteer cache contents:"
+      ls -la /opt/render/.cache/puppeteer/ 2>/dev/null || echo "Cache directory not accessible"
+      find /opt/render/.cache/puppeteer/ -name "chrome" -type f 2>/dev/null | head -5 || echo "No Chrome binaries in cache"
+
+      # Check /usr/bin for any chromium-related binaries
+      echo "Chromium binaries in /usr/bin:"
+      ls -la /usr/bin/*chrom* 2>/dev/null || echo "No chromium binaries in /usr/bin"
+
+      # Check /usr/lib for chromium
+      echo "Chromium in /usr/lib:"
+      find /usr/lib -name "*chrom*" -type f 2>/dev/null | head -5 || echo "No chromium in /usr/lib"
+
+      echo "=== Creating Fallback Symlinks ==="
+      # Create symlinks from any found browser to expected locations
+      if [ -f "/usr/bin/chromium-browser" ] && [ ! -f "/usr/bin/chromium" ]; then
+        ln -sf /usr/bin/chromium-browser /usr/bin/chromium 2>/dev/null && echo "Created chromium symlink"
       fi
 
-      echo "=== Final Verification ==="
-      echo "Available browsers:"
-      ls -la /usr/bin/*chrom* 2>/dev/null || echo "No chromium browsers in /usr/bin"
+      if [ -f "/usr/bin/google-chrome-stable" ] && [ ! -f "/usr/bin/google-chrome" ]; then
+        ln -sf /usr/bin/google-chrome-stable /usr/bin/google-chrome 2>/dev/null && echo "Created google-chrome symlink"
+      fi
+
+      # Create symlink to puppeteer chrome if it exists
+      CHROME_BINARY=$(find /opt/render/.cache/puppeteer/ -name "chrome" -type f | head -1)
+      if [ -n "$CHROME_BINARY" ] && [ ! -f "/usr/bin/chrome" ]; then
+        ln -sf "$CHROME_BINARY" /usr/bin/chrome 2>/dev/null && echo "Created chrome symlink to puppeteer binary"
+      fi
+
+      echo "=== Final Status Check ==="
+      echo "Available browsers for puppeteer:"
+      ls -la /usr/bin/chromium* 2>/dev/null || echo "No chromium browsers"
+      ls -la /usr/bin/google-chrome* 2>/dev/null || echo "No google-chrome browsers"
+      ls -la /usr/bin/chrome 2>/dev/null || echo "No chrome symlink"
+
+      echo "Puppeteer cache status:"
       ls -la /opt/render/.cache/puppeteer/chrome/ 2>/dev/null || echo "No puppeteer chrome versions"
 
-      echo "=== Build Complete ==="
+      echo "=== Build Complete - Browser Setup Finished ==="
     startCommand: npm start
     envVars:
       - key: PUPPETEER_CACHE_DIR
