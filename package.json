@@ -10,6 +10,7 @@
     "postinstall": "npm run build",
     "install-browser": "npx puppeteer browsers install chrome",
     "check-browser": "node -e \"const puppeteer = require('puppeteer'); console.log('Puppeteer version:', require('puppeteer/package.json').version);\"",
+    "test-browser": "node test-browser.js",
     "health": "curl http://localhost:3000/health"
   },
   "keywords": [
@@ -25,6 +26,7 @@
   },
   "dependencies": {
     "express": "^5.1.0",
-    "puppeteer": "^24.20.0"
+    "puppeteer": "^24.20.0",
+    "puppeteer-core": "^24.20.0"
   }
 }

@@ -4,12 +4,25 @@ services:
     env: node
     plan: free
     buildCommand: |
-      echo "=== Installing Puppeteer Chromium ==="
+      echo "=== Setting up Puppeteer Cache Directory ==="
+      mkdir -p /opt/render/.cache/puppeteer
+      export PUPPETEER_CACHE_DIR=/opt/render/.cache/puppeteer
+      echo "Cache directory: $PUPPETEER_CACHE_DIR"
+
+      echo "=== Installing Dependencies ==="
       npm install
-      npx puppeteer browsers install chrome
-      echo "=== Chromium Installation Complete ==="
-      echo "=== Checking installed browsers ==="
-      ls -la $HOME/.cache/puppeteer/ 2>/dev/null || echo "Puppeteer cache not found"
+
+      echo "=== Attempting to install system Chromium (fallback) ==="
+      apt-get update && apt-get install -y chromium-browser || echo "System Chromium installation failed, using Puppeteer bundled version"
+
+      echo "=== Installing Puppeteer Chromium ==="
+      PUPPETEER_CACHE_DIR=/opt/render/.cache/puppeteer npx puppeteer browsers install chrome || echo "Puppeteer browser installation failed"
+
+      echo "=== Verifying Installation ==="
+      ls -la /opt/render/.cache/puppeteer/chrome/ 2>/dev/null || echo "Chrome directory not found"
+      find /opt/render/.cache/puppeteer/ -name "chrome" -type f 2>/dev/null || echo "Chrome binary not found"
+      which chromium-browser 2>/dev/null || echo "System chromium-browser not found"
+
       echo "=== Build Complete ==="
     startCommand: npm start
     envVars:
