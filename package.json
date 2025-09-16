@@ -6,9 +6,18 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node index.js",
+    "build": "npx puppeteer browsers install chrome && echo 'Chromium installed successfully'",
+    "postinstall": "npm run build",
+    "install-browser": "npx puppeteer browsers install chrome",
+    "check-browser": "node -e \"const puppeteer = require('puppeteer'); console.log('Puppeteer version:', require('puppeteer/package.json').version);\"",
     "health": "curl http://localhost:3000/health"
   },
-  "keywords": ["screenshot", "puppeteer", "api", "web-scraping"],
+  "keywords": [
+    "screenshot",
+    "puppeteer",
+    "api",
+    "web-scraping"
+  ],
   "author": "Your Name",
   "license": "MIT",
   "engines": {

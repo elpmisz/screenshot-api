@@ -171,6 +171,10 @@ class BrowserPool {
           "/opt/chromium/chromium",
           "/snap/bin/chromium",
           "/snap/bin/chromium-browser",
+          // Puppeteer cache paths
+          "/opt/render/.cache/puppeteer/chrome/linux-140.0.7339.82/chrome-linux64/chrome",
+          "/root/.cache/puppeteer/chrome/linux-140.0.7339.82/chrome-linux64/chrome",
+          `${process.env.HOME}/.cache/puppeteer/chrome/linux-140.0.7339.82/chrome-linux64/chrome`,
         ];
 
         for (const chromiumPath of chromiumPaths) {
@@ -188,8 +192,31 @@ class BrowserPool {
           console.log(
             "No system browser found, attempting to use Puppeteer's bundled Chromium..."
           );
-          // Puppeteer will automatically download and use bundled Chromium if no executablePath is set
-          console.log("Will use Puppeteer's bundled Chromium as fallback");
+
+          // Try to find Puppeteer's cached browser
+          const puppeteerCacheDir =
+            process.env.PUPPETEER_CACHE_DIR ||
+            (process.env.RENDER
+              ? "/opt/render/.cache/puppeteer"
+              : `${process.env.HOME}/.cache/puppeteer`);
+
+          const chromeVersion = "linux-140.0.7339.82";
+          const bundledPath = `${puppeteerCacheDir}/chrome/${chromeVersion}/chrome-linux64/chrome`;
+
+          if (fs.existsSync(bundledPath)) {
+            executablePath = bundledPath;
+            console.log(
+              `Using Puppeteer's bundled Chromium: ${executablePath}`
+            );
+          } else {
+            console.log(
+              `Puppeteer bundled Chromium not found at: ${bundledPath}`
+            );
+            console.log("Will attempt to download Chromium during launch...");
+            console.log(
+              "If this fails, run: npx puppeteer browsers install chrome"
+            );
+          }
         } catch (error) {
           console.error(
             "Failed to setup Puppeteer bundled Chromium:",
@@ -206,6 +233,35 @@ class BrowserPool {
       console.log(
         "No specific browser executable found, using Puppeteer's default (bundled Chromium)"
       );
+      // Configure Puppeteer to download Chromium if not found
+      launchOptions.args = [
+        ...launchOptions.args,
+        "--disable-dev-tools",
+        "--disable-software-rasterizer",
+        "--disable-background-timer-throttling",
+        "--disable-renderer-backgrounding",
+        "--disable-features=TranslateUI,BlinkGenPropertyTrees",
+        "--disable-ipc-flooding-protection",
+        "--disable-hang-monitor",
+        "--disable-prompt-on-repost",
+        "--force-color-profile=srgb",
+        "--metrics-recording-only",
+        "--no-first-run",
+        "--enable-automation",
+        "--password-store=basic",
+        "--use-mock-keychain",
+        "--no-service-autorun",
+        "--export-tagged-pdf",
+        "--disable-search-engine-choice-screen",
+        "--disable-component-update",
+        "--disable-domain-reliability",
+        "--disable-client-side-phishing-detection",
+        "--disable-background-networking",
+        "--no-default-browser-check",
+        "--no-pings",
+        "--disable-web-security",
+        "--allow-running-insecure-content",
+      ];
     }
 
     const browser = await puppeteer.launch(launchOptions);

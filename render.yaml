@@ -4,21 +4,27 @@ services:
     env: node
     plan: free
     buildCommand: |
-      apt-get update
-      apt-get install -y chromium-browser
+      echo "=== Installing Puppeteer Chromium ==="
       npm install
-      echo "=== System Chrome Check ==="
-      which chromium-browser || echo "Chromium not found"
-      ls -la /usr/bin/chromium* 2>/dev/null || echo "No chromium binaries"
-      echo "=== End Check ==="
+      npx puppeteer browsers install chrome
+      echo "=== Chromium Installation Complete ==="
+      echo "=== Checking installed browsers ==="
+      ls -la $HOME/.cache/puppeteer/ 2>/dev/null || echo "Puppeteer cache not found"
+      echo "=== Build Complete ==="
     startCommand: npm start
     envVars:
+      - key: PUPPETEER_CACHE_DIR
+        value: /opt/render/.cache/puppeteer
       - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
-        value: true
-      - key: PUPPETEER_EXECUTABLE_PATH
-        value: /usr/bin/chromium-browser
+        value: false
+      - key: BROWSER_POOL_SIZE
+        value: 1
+      - key: MAX_CONCURRENT_REQUESTS
+        value: 2
+      - key: PAGE_LOAD_TIMEOUT
+        value: 60000
       - key: IDLE_TIMEOUT
-        value: 180000
+        value: 1800000
       - key: NODE_ENV
         value: production
       - key: RENDER
