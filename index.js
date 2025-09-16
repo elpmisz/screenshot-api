@@ -172,7 +172,7 @@ class BrowserPool {
           executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
           console.log(`Using PUPPETEER_EXECUTABLE_PATH: ${executablePath}`);
         } else {
-          // Common Chromium paths on Linux/Render
+          // Extended list of Chromium paths for Render and Linux
           const chromiumPaths = [
             "/usr/bin/chromium-browser",
             "/usr/bin/chromium",
@@ -184,6 +184,17 @@ class BrowserPool {
             "/opt/chromium/chromium",
             "/snap/bin/chromium",
             "/snap/bin/chromium-browser",
+            "/usr/local/bin/chromium-browser",
+            "/usr/local/bin/chromium",
+            "/usr/local/bin/google-chrome-stable",
+            "/usr/local/bin/google-chrome",
+            // Additional paths that might exist on Render
+            "/app/.cache/puppeteer/chrome/linux-140.0.7339.82/chrome-linux64/chrome",
+            "/app/.cache/puppeteer/chrome/linux-131.0.6778.85/chrome-linux64/chrome",
+            "/app/.cache/puppeteer/chrome/linux-130.0.6723.69/chrome-linux64/chrome",
+            "/tmp/.cache/puppeteer/chrome/linux-140.0.7339.82/chrome-linux64/chrome",
+            "/tmp/.cache/puppeteer/chrome/linux-131.0.6778.85/chrome-linux64/chrome",
+            "/tmp/.cache/puppeteer/chrome/linux-130.0.6723.69/chrome-linux64/chrome",
           ];
 
           for (const chromiumPath of chromiumPaths) {
@@ -196,39 +207,45 @@ class BrowserPool {
 
           // If still not found, try multiple version patterns in cache
           if (!executablePath) {
-            const puppeteerCacheDir =
-              process.env.PUPPETEER_CACHE_DIR ||
-              (process.env.RENDER
-                ? "/opt/render/.cache/puppeteer"
-                : `${process.env.HOME}/.cache/puppeteer`);
-
-            console.log(`Checking Puppeteer cache at: ${puppeteerCacheDir}`);
-
-            // Try multiple possible version patterns
-            const possibleVersions = [
-              "linux-140.0.7339.82",
-              "linux-131.0.6778.85", // Previous version
-              "linux-130.0.6723.69", // Older version
+            const puppeteerCacheDirs = [
+              process.env.PUPPETEER_CACHE_DIR || "/opt/render/.cache/puppeteer",
+              "/app/.cache/puppeteer",
+              "/tmp/.cache/puppeteer",
+              `${process.env.HOME}/.cache/puppeteer`,
+              "/root/.cache/puppeteer",
             ];
 
-            for (const version of possibleVersions) {
-              const bundledPath = `${puppeteerCacheDir}/chrome/${version}/chrome-linux64/chrome`;
-              console.log(`Checking: ${bundledPath}`);
-              if (fs.existsSync(bundledPath)) {
-                executablePath = bundledPath;
-                console.log(
-                  `Found Puppeteer's bundled Chromium: ${executablePath}`
-                );
-                break;
-              }
-            }
+            for (const cacheDir of puppeteerCacheDirs) {
+              console.log(`Checking Puppeteer cache at: ${cacheDir}`);
 
-            // If still not found, try to find any chrome binary in the cache
-            if (!executablePath) {
+              // Try multiple possible version patterns
+              const possibleVersions = [
+                "linux-140.0.7339.82",
+                "linux-131.0.6778.85",
+                "linux-130.0.6723.69",
+                "linux-129.0.6668.89",
+                "linux-128.0.6613.84",
+              ];
+
+              for (const version of possibleVersions) {
+                const bundledPath = `${cacheDir}/chrome/${version}/chrome-linux64/chrome`;
+                console.log(`Checking: ${bundledPath}`);
+                if (fs.existsSync(bundledPath)) {
+                  executablePath = bundledPath;
+                  console.log(
+                    `Found Puppeteer's bundled Chromium: ${executablePath}`
+                  );
+                  break;
+                }
+              }
+
+              if (executablePath) break;
+
+              // If still not found, try to find any chrome binary in the cache
               try {
                 const find = require("child_process").execSync;
                 const result = find(
-                  `find ${puppeteerCacheDir} -name "chrome" -type f 2>/dev/null | head -1`,
+                  `find ${cacheDir} -name "chrome" -type f 2>/dev/null | head -1`,
                   { encoding: "utf8" }
                 );
                 if (result.trim()) {
@@ -236,9 +253,12 @@ class BrowserPool {
                   console.log(
                     `Found Chrome binary via find: ${executablePath}`
                   );
+                  break;
                 }
               } catch (error) {
-                console.log("Could not find Chrome binary using find command");
+                console.log(
+                  `Could not find Chrome binary using find command in ${cacheDir}`
+                );
               }
             }
           }
@@ -261,7 +281,38 @@ class BrowserPool {
               "--single-process",
               "--no-zygote",
               "--disable-dev-tools",
+              "--disable-background-timer-throttling",
+              "--disable-renderer-backgrounding",
+              "--disable-features=TranslateUI,BlinkGenPropertyTrees",
+              "--disable-ipc-flooding-protection",
+              "--disable-hang-monitor",
+              "--disable-prompt-on-repost",
+              "--force-color-profile=srgb",
+              "--metrics-recording-only",
+              "--no-first-run",
+              "--enable-automation",
+              "--password-store=basic",
+              "--use-mock-keychain",
+              "--no-service-autorun",
+              "--export-tagged-pdf",
+              "--disable-search-engine-choice-screen",
+              "--disable-component-update",
+              "--disable-domain-reliability",
+              "--disable-client-side-phishing-detection",
+              "--disable-background-networking",
+              "--no-default-browser-check",
+              "--no-pings",
+              "--disable-web-security",
+              "--allow-running-insecure-content",
             ];
+
+            // Try to trigger download by setting executablePath to null and letting Puppeteer handle it
+            launchOptions.executablePath = undefined;
+
+            // Add download-specific args
+            launchOptions.args.push(
+              "--disable-features=VizDisplayCompositor,VizHitTestSurfaceLayer"
+            );
           } catch (error) {
             console.error(
               "Failed to setup Puppeteer bundled Chromium:",
@@ -335,6 +386,16 @@ class BrowserPool {
               "/usr/bin/chromium",
               "/usr/bin/google-chrome-stable",
               "/usr/bin/google-chrome",
+              "/usr/lib/bin/chromium-browser",
+              "/usr/lib/bin/chromium",
+              "/usr/local/bin/chromium-browser",
+              "/usr/local/bin/chromium",
+              "/usr/local/bin/google-chrome-stable",
+              "/usr/local/bin/google-chrome",
+              "/opt/google/chrome/chrome",
+              "/opt/chromium/chromium",
+              "/snap/bin/chromium",
+              "/snap/bin/chromium-browser",
             ];
 
             for (const sysPath of systemPaths) {
@@ -344,6 +405,23 @@ class BrowserPool {
                   `Found system Chromium for puppeteer-core: ${executablePath}`
                 );
                 break;
+              }
+            }
+
+            // If still no executable found, try to find any chromium-like binary
+            if (!executablePath) {
+              try {
+                const find = require("child_process").execSync;
+                const result = find(
+                  `find /usr -name "*chrom*" -type f -executable 2>/dev/null | head -1`,
+                  { encoding: "utf8" }
+                );
+                if (result.trim()) {
+                  executablePath = result.trim();
+                  console.log(`Found Chromium-like binary: ${executablePath}`);
+                }
+              } catch (error) {
+                console.log("Could not find any Chromium-like binary");
               }
             }
 
